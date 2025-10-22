@@ -15,11 +15,25 @@ This skill analyzes Python codebases to provide detailed quality assessments inc
 
 When a user asks to analyze code quality, follow these steps:
 
-### 1. Identify Target Files
+### 1. Load Industry Benchmarks (REQUIRED FIRST STEP)
+
+**IMPORTANT:** Before analyzing any code, you MUST first read the industry standard benchmarks:
+
+```
+read_file(".skills/code_quality_analyzer/benchmarks/industry_standards.json")
+```
+
+This file contains the thresholds for:
+- Cyclomatic complexity (excellent: 1-5, good: 6-10, fair: 11-20, poor: 21+)
+- Function length limits
+- Documentation coverage requirements
+- Code smell thresholds
+
+### 2. Identify Target Files
 
 Ask the user which files or directory to analyze, or use context clues from their request.
 
-### 2. Read and Analyze Code
+### 3. Read and Analyze Code
 
 Use the `read_file` tool to read the target Python files. For each file, analyze:
 
