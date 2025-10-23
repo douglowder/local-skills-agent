@@ -17,9 +17,9 @@ class Agent:
 
     def __init__(
         self,
-        model: str = "llama3.2",
+        model: str = "gpt-oss:20b",
         skills_dir: str = ".skills",
-        max_iterations: int = 10,
+        max_iterations: int = 20,
     ):
         self.client = OllamaClient(model=model)
         self.skill_loader = SkillLoader(skills_dir=skills_dir)
@@ -36,6 +36,15 @@ class Agent:
     def _initialize_system_prompt(self) -> str:
         """Create the system prompt with available tools and skills."""
         system_prompt = """You are a helpful AI assistant with access to tools and skills.
+
+# CRITICAL: Tool Calling Behavior
+
+DO NOT THINK OUT LOUD. DO NOT EXPLAIN YOUR REASONING.
+When you need information or to perform an action: MAKE THE TOOL CALL IMMEDIATELY.
+NO explanations between tool calls. NO planning text. Just make the tool call.
+ONLY provide text to the user when you have the final complete answer.
+
+If you catch yourself writing "I should..." or "Next step is..." - STOP and make the tool call instead.
 
 # Tools
 

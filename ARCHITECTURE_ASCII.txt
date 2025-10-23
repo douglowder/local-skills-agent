@@ -1,0 +1,87 @@
+SELF-EXTENDING SKILLS SYSTEM ARCHITECTURE
+════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────────┐
+│              USER REQUEST                       │
+│  "Create a skill for X" or "Do task Y"          │
+└──────────────────┬──────────────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────────────┐
+│         AGENT LOOP (agent.py)                   │
+│  • Maintains context (message history)          │
+│  • Orchestrates LLM calls                       │
+│  • Processes tool calls                         │
+│  • Max iterations: 20                           │
+└──────────┬──────────────────────────────────────┘
+           │
+           ├──────────────┐
+           │              │
+           ▼              ▼
+┌──────────────────┐  ┌──────────────────────┐
+│   OLLAMA CLIENT  │  │   SKILLS LOADER      │
+│  (ollama_client) │  │  (skill_loader.py)   │
+│                  │  │                      │
+│ • gpt-oss:20b    │  │ • Discovers .md      │
+│ • llama3.1:8b    │  │ • Loads descriptions │
+│ • Local models   │  │ • Progressive load   │
+└──────────────────┘  └──────────────────────┘
+           │                      │
+           │                      │
+           ▼                      ▼
+┌─────────────────────────────────────────────────┐
+│              TOOL EXECUTION                     │
+│  ┌─────────────────────────────────────────┐   │
+│  │ read_file    │ write_file               │   │
+│  │ bash         │ list_directory           │   │
+│  └─────────────────────────────────────────┘   │
+└──────────┬──────────────────────────────────────┘
+           │
+           ▼
+┌─────────────────────────────────────────────────┐
+│           SKILLS DIRECTORY (.skills/)           │
+│                                                 │
+│  ┌────────────────────────────────────┐         │
+│  │  skill_creator.md  👑               │         │
+│  │  ├── Creates new skills             │         │
+│  │  └── Templates & best practices     │         │
+│  └────────────────────────────────────┘         │
+│                   │                             │
+│                   │ Creates                     │
+│                   ▼                             │
+│  ┌────────────────────────────────────┐         │
+│  │  readme_generator.md               │         │
+│  │  test_generator.md                 │         │
+│  │  [future skills...]                │         │
+│  └────────────────────────────────────┘         │
+│                                                 │
+│  ┌────────────────────────────────────┐         │
+│  │  code_quality_analyzer.md          │         │
+│  │  └── code_quality_analyzer/        │         │
+│  │      ├── benchmarks/*.json         │         │
+│  │      ├── scripts/*.py              │         │
+│  │      └── templates/*.md            │         │
+│  └────────────────────────────────────┘         │
+│                                                 │
+└─────────────────────────────────────────────────┘
+
+THE META-PROGRAMMING LOOP:
+═══════════════════════════
+
+User describes need
+        ↓
+Agent reads skill_creator.md
+        ↓
+Agent writes new skill file
+        ↓
+New skill auto-discovered
+        ↓
+Agent can immediately use it
+        ↓
+Skills compose together
+        ↓
+System becomes more capable
+        ↓
+Repeat ∞
+
+KEY INNOVATION: The agent extends itself! 🚀

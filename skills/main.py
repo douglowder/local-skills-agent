@@ -57,13 +57,13 @@ def list_skills(agent: Agent, console: Console) -> None:
         console.print("[yellow]No skills found. Create .md files in the .skills/ directory.[/yellow]")
 
 
-def interactive_mode(model: str, skills_dir: str) -> None:
+def interactive_mode(model: str, skills_dir: str, max_iterations: int = 20) -> None:
     """Run the agent in interactive mode."""
     console = Console()
     print_welcome(console)
 
     try:
-        agent = Agent(model=model, skills_dir=skills_dir)
+        agent = Agent(model=model, skills_dir=skills_dir, max_iterations=max_iterations)
         console.print(f"[green]✓[/green] Using model: [bold]{model}[/bold]")
         console.print(f"[green]✓[/green] Skills directory: [bold]{skills_dir}[/bold]\n")
 
@@ -131,8 +131,8 @@ def main() -> None:
     parser.add_argument(
         "--model",
         "-m",
-        default="llama3.2",
-        help="Ollama model to use (default: llama3.2)",
+        default="gpt-oss:20b",
+        help="Ollama model to use (default: gpt-oss:20b)",
     )
     parser.add_argument(
         "--skills-dir",
@@ -144,6 +144,12 @@ def main() -> None:
         "--message",
         help="Single message to send (non-interactive mode)",
     )
+    parser.add_argument(
+        "--max-iterations",
+        type=int,
+        default=20,
+        help="Maximum number of agent loop iterations (default: 20)",
+    )
 
     args = parser.parse_args()
 
@@ -151,14 +157,14 @@ def main() -> None:
         # Non-interactive mode
         console = Console()
         try:
-            agent = Agent(model=args.model, skills_dir=args.skills_dir)
+            agent = Agent(model=args.model, skills_dir=args.skills_dir, max_iterations=args.max_iterations)
             agent.run(args.message)
         except Exception as e:
             console.print(f"[bold red]Error:[/bold red] {e}")
             sys.exit(1)
     else:
         # Interactive mode
-        interactive_mode(args.model, args.skills_dir)
+        interactive_mode(args.model, args.skills_dir, args.max_iterations)
 
 
 if __name__ == "__main__":

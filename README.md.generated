@@ -1,0 +1,121 @@
+# Local Skills Agent
+
+A local, Ollama-based reimplementation of Claude Skills. This project implements an agentic loop where an LLM is called iteratively with context and tool access.
+
+## Table of Contents
+- [Overview](#overview)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Development](#development)
+- [Contributing](#contributing)
+- [License](#license)
+
+## Overview
+
+- **Core concept**: an LLM is invoked in a loop, maintaining a history of actions, and has access to tool calls (e.g. read/write files, run bash). The project exposes a command‑line interface (`skills`) that runs this loop.
+- **Skills**: Markdown files in the `.skills/` directory that contain step‑by‑step instructions for the LLM.
+- **Tools**: `read_file`, `write_file`, `bash`, `list_directory`.
+- **Ollama integration**: Uses the local Ollama server to provide models such as `gpt-oss`, `llama3.1`, etc.
+
+## Installation
+
+1. **Prerequisites** – Make sure [Ollama](https://ollama.ai/) is installed and running:
+   ```bash
+   ollama serve
+   ```
+2. **Pull a recommended model** (choose one that supports tool calling):
+   ```bash
+   ollama pull gpt-oss:20b
+   # or
+   ollama pull llama3.1:8b-instruct-q4_K_M
+   ```
+3. **Install this package** (using `uv` or `pip`):
+   ```bash
+   uv pip install -e .
+   # or
+   pip install -e .
+   ```
+
+## Usage
+
+### Interactive Mode
+
+Run the agent and interact via the terminal:
+
+```bash
+skills
+```
+
+You will be prompted for input; the LLM will respond and can invoke the tools. Some handy commands:
+
+- `/help` – show available commands
+- `/reset` – clear conversation history
+- `/models` – list available Ollama models
+- `/skills` – list loaded skills
+- `/quit` or `/exit` – exit the program
+
+### Single‑Message Mode
+
+Pass a prompt directly and get a single response:
+
+```bash
+skills --message "List all Python files in this directory"
+```
+
+### Advanced Options
+
+```bash
+# Specify a model
+skills --model llama3.1:8b-instruct-q4_K_M
+
+# Adjust max iterations (default: 20)
+skills --max-iterations 30 --message "Complex multi‑step task"
+
+# Use a custom skills directory
+skills --skills-dir ./my‑skills
+```
+
+## Development
+
+The project is written in Python 3.11+. To contribute:
+
+1. **Clone** the repo.
+2. **Create a virtual environment** (recommended):
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate
+   ```
+3. **Install dependencies**:
+   ```bash
+   pip install -e .[dev]
+   ```
+4. **Run tests**:
+   ```bash
+   pytest
+   ```
+
+### Adding a Skill
+
+Skills live in `.skills/`. Create a new `.md` file with a brief description and a `## Instructions` section that the LLM can follow. The agent will automatically load it.
+
+```markdown
+# My Custom Skill
+
+A short description of what this skill does.
+
+## Instructions
+
+1. Step one
+2. Step two
+3. …
+```
+
+The agent will discover and expose the skill to the LLM.
+
+## Contributing
+
+Feel free to open issues or submit pull requests. Please follow the existing code style and include tests where appropriate.
+
+## License
+
+This project is licensed under the **MIT License** – see the `LICENSE` file for details.
