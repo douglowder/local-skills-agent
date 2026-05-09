@@ -27,8 +27,8 @@ class TestAgent:
         """Test Agent with default parameters."""
         agent = Agent()
 
-        assert agent.client.model == "llama3.2"
-        assert agent.max_iterations == 10
+        assert agent.client.model == "gpt-oss:20b"
+        assert agent.max_iterations == 20
 
     def test_initialize_system_prompt(self, sample_skill_dir):
         """Test system prompt initialization."""
