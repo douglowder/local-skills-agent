@@ -122,6 +122,14 @@ class TestWriteFileTool:
         result = tool.execute(path=str(temp_dir / "test.txt"), content="content")
         assert "Error writing file" in result
 
+    def test_write_file_confirm_declined_blocks_write(self, temp_dir):
+        """If the confirm callback returns False, the file is not written."""
+        target = temp_dir / "should_not_exist.txt"
+        tool = WriteFileTool(confirm=lambda action, details: False)
+        result = tool.execute(path=str(target), content="nope")
+        assert "declined by user" in result
+        assert not target.exists()
+
 
 class TestBashTool:
     """Test the BashTool class."""
@@ -169,6 +177,29 @@ class TestBashTool:
 
         result = tool.execute(command="test")
         assert "Error executing command" in result
+
+    def test_bash_confirm_declined_blocks_execution(self, monkeypatch):
+        """If the confirm callback returns False, the command is not run."""
+        ran = {"value": False}
+
+        def mock_run(*args, **kwargs):
+            ran["value"] = True
+            raise AssertionError("subprocess.run should not have been called")
+
+        monkeypatch.setattr(subprocess, "run", mock_run)
+
+        tool = BashTool(confirm=lambda action, details: False)
+        result = tool.execute(command="rm -rf /")
+        assert "declined by user" in result
+        assert ran["value"] is False
+
+    def test_bash_confirm_approved_runs_command(self):
+        """If the confirm callback returns True, the command runs normally."""
+        seen = []
+        tool = BashTool(confirm=lambda action, details: seen.append((action, details)) or True)
+        result = tool.execute(command="echo confirmed")
+        assert "confirmed" in result
+        assert seen == [("bash", {"command": "echo confirmed"})]
 
 
 class TestListDirectoryTool:

@@ -3,7 +3,9 @@
 import json
 import subprocess
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Optional
+
+ConfirmCallback = Callable[[str, dict[str, Any]], bool]
 
 
 class Tool:
@@ -63,7 +65,7 @@ class ReadFileTool(Tool):
 class WriteFileTool(Tool):
     """Tool to write content to a file."""
 
-    def __init__(self):
+    def __init__(self, confirm: Optional[ConfirmCallback] = None):
         super().__init__(
             name="write_file",
             description="Write content to a file",
@@ -82,9 +84,14 @@ class WriteFileTool(Tool):
                 "required": ["path", "content"],
             },
         )
+        self.confirm = confirm
 
     def execute(self, path: str, content: str) -> str:
         """Write content to file."""
+        if self.confirm and not self.confirm(
+            "write_file", {"path": path, "bytes": len(content)}
+        ):
+            return "Error: Write declined by user"
         try:
             file_path = Path(path)
             file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -97,7 +104,7 @@ class WriteFileTool(Tool):
 class BashTool(Tool):
     """Tool to execute bash commands."""
 
-    def __init__(self):
+    def __init__(self, confirm: Optional[ConfirmCallback] = None):
         super().__init__(
             name="bash",
             description="Execute a bash command",
@@ -112,9 +119,12 @@ class BashTool(Tool):
                 "required": ["command"],
             },
         )
+        self.confirm = confirm
 
     def execute(self, command: str) -> str:
         """Execute bash command and return output."""
+        if self.confirm and not self.confirm("bash", {"command": command}):
+            return "Error: Command execution declined by user"
         try:
             result = subprocess.run(
                 command,
@@ -173,12 +183,18 @@ class ListDirectoryTool(Tool):
             return f"Error listing directory: {e}"
 
 
-def get_default_tools() -> list[Tool]:
-    """Return the default set of tools."""
+def get_default_tools(
+    confirm: Optional[ConfirmCallback] = None,
+) -> list[Tool]:
+    """Return the default set of tools.
+
+    `confirm`, if provided, is invoked before any side-effectful tool
+    (bash, write_file) runs. Returning False cancels the operation.
+    """
     return [
         ReadFileTool(),
-        WriteFileTool(),
-        BashTool(),
+        WriteFileTool(confirm=confirm),
+        BashTool(confirm=confirm),
         ListDirectoryTool(),
     ]
 

@@ -57,15 +57,35 @@ def list_skills(agent: Agent, console: Console) -> None:
         console.print("[yellow]No skills found. Create .md files in the .skills/ directory.[/yellow]")
 
 
-def interactive_mode(model: str, skills_dir: str, max_iterations: int = 20) -> None:
+def interactive_mode(
+    model: str,
+    skills_dir: str,
+    max_iterations: int = 20,
+    require_confirmation: bool = True,
+) -> None:
     """Run the agent in interactive mode."""
     console = Console()
     print_welcome(console)
 
     try:
-        agent = Agent(model=model, skills_dir=skills_dir, max_iterations=max_iterations)
+        agent = Agent(
+            model=model,
+            skills_dir=skills_dir,
+            max_iterations=max_iterations,
+            require_confirmation=require_confirmation,
+        )
         console.print(f"[green]✓[/green] Using model: [bold]{model}[/bold]")
-        console.print(f"[green]✓[/green] Skills directory: [bold]{skills_dir}[/bold]\n")
+        console.print(f"[green]✓[/green] Skills directory: [bold]{skills_dir}[/bold]")
+        if require_confirmation:
+            console.print(
+                "[green]✓[/green] Confirmation prompts: [bold]on[/bold] "
+                "(bash and write_file will ask before running)\n"
+            )
+        else:
+            console.print(
+                "[bold red]⚠ Confirmation prompts disabled[/bold red] "
+                "— bash and write_file will run without asking\n"
+            )
 
         skills_count = len(agent.skill_loader.skills)
         if skills_count > 0:
@@ -150,21 +170,41 @@ def main() -> None:
         default=20,
         help="Maximum number of agent loop iterations (default: 20)",
     )
+    parser.add_argument(
+        "--yes-i-trust-the-llm",
+        action="store_true",
+        help=(
+            "Skip the y/N confirmation before bash and write_file run. "
+            "DANGEROUS: the LLM can execute arbitrary commands and overwrite "
+            "files without asking. Only use in fully sandboxed environments."
+        ),
+    )
 
     args = parser.parse_args()
+    require_confirmation = not args.yes_i_trust_the_llm
 
     if args.message:
         # Non-interactive mode
         console = Console()
         try:
-            agent = Agent(model=args.model, skills_dir=args.skills_dir, max_iterations=args.max_iterations)
+            agent = Agent(
+                model=args.model,
+                skills_dir=args.skills_dir,
+                max_iterations=args.max_iterations,
+                require_confirmation=require_confirmation,
+            )
             agent.run(args.message)
         except Exception as e:
             console.print(f"[bold red]Error:[/bold red] {e}")
             sys.exit(1)
     else:
         # Interactive mode
-        interactive_mode(args.model, args.skills_dir, args.max_iterations)
+        interactive_mode(
+            args.model,
+            args.skills_dir,
+            args.max_iterations,
+            require_confirmation=require_confirmation,
+        )
 
 
 if __name__ == "__main__":

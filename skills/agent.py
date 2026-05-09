@@ -6,6 +6,7 @@ from typing import Any
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
+from rich.prompt import Confirm
 
 from .ollama_client import OllamaClient
 from .skill_loader import SkillLoader
@@ -20,18 +21,38 @@ class Agent:
         model: str = "gpt-oss:20b",
         skills_dir: str = ".skills",
         max_iterations: int = 20,
+        require_confirmation: bool = True,
     ):
         self.client = OllamaClient(model=model)
         self.skill_loader = SkillLoader(skills_dir=skills_dir)
-        self.tools = {tool.name: tool for tool in get_default_tools()}
-        self.max_iterations = max_iterations
         self.console = Console()
+        self.require_confirmation = require_confirmation
+        confirmer = self._make_confirmer() if require_confirmation else None
+        self.tools = {
+            tool.name: tool for tool in get_default_tools(confirm=confirmer)
+        }
+        self.max_iterations = max_iterations
 
         # Message history (context)
         self.messages: list[dict[str, Any]] = []
 
         # Load skills
         self.skill_loader.discover_skills()
+
+    def _make_confirmer(self):
+        """Build a confirmation callback bound to this agent's console."""
+
+        def confirmer(action: str, details: dict) -> bool:
+            try:
+                return Confirm.ask(
+                    f"[bold red]⚠ Allow {action}?[/bold red]",
+                    default=False,
+                    console=self.console,
+                )
+            except (EOFError, KeyboardInterrupt):
+                return False
+
+        return confirmer
 
     def _initialize_system_prompt(self) -> str:
         """Create the system prompt with available tools and skills."""
