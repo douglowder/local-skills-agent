@@ -2,7 +2,7 @@
 
 import pytest
 
-from skills.ollama_client import OllamaClient
+from skills.ollama_client import OllamaClient, _is_loopback, _normalize_host
 
 
 class TestOllamaClient:
@@ -216,3 +216,63 @@ class TestOllamaClient:
         # Verify the custom model was used
         call_args = mock_chat.call_args
         assert call_args[1]["model"] == "qwen3:30b"
+
+
+class TestHostValidation:
+    """Tests for OLLAMA_HOST resolution and loopback validation."""
+
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("127.0.0.1:11434", "http://127.0.0.1:11434"),
+            ("localhost:11434", "http://localhost:11434"),
+            ("http://127.0.0.1:11434", "http://127.0.0.1:11434"),
+            ("https://example.com", "https://example.com"),
+        ],
+    )
+    def test_normalize_host(self, raw, expected):
+        assert _normalize_host(raw) == expected
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "http://127.0.0.1:11434",
+            "http://localhost:11434",
+            "http://[::1]:11434",
+            "http://127.0.0.255",
+        ],
+    )
+    def test_loopback_urls_match(self, url):
+        assert _is_loopback(url) is True
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "http://10.0.0.1:11434",
+            "http://192.168.1.5:11434",
+            "https://ollama.example.com",
+            "http://8.8.8.8:11434",
+        ],
+    )
+    def test_non_loopback_urls_do_not_match(self, url):
+        assert _is_loopback(url) is False
+
+    def test_default_host_is_loopback(self, monkeypatch):
+        monkeypatch.delenv("OLLAMA_HOST", raising=False)
+        client = OllamaClient()
+        assert client.host == "http://127.0.0.1:11434"
+
+    def test_remote_host_refused_by_default(self, monkeypatch):
+        monkeypatch.setenv("OLLAMA_HOST", "http://ollama.example.com:11434")
+        with pytest.raises(ValueError, match="non-loopback"):
+            OllamaClient()
+
+    def test_remote_host_allowed_with_flag(self, monkeypatch):
+        monkeypatch.setenv("OLLAMA_HOST", "http://ollama.example.com:11434")
+        client = OllamaClient(allow_remote=True)
+        assert client.host == "http://ollama.example.com:11434"
+
+    def test_bare_host_port_normalized_and_validated(self, monkeypatch):
+        monkeypatch.setenv("OLLAMA_HOST", "127.0.0.1:11434")
+        client = OllamaClient()
+        assert client.host == "http://127.0.0.1:11434"

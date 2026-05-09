@@ -1,17 +1,55 @@
 """Ollama client integration."""
 
-import json
+import ipaddress
+import os
+import urllib.parse
 from typing import Any, Iterator
 
 import ollama
+
+DEFAULT_HOST = "http://127.0.0.1:11434"
+
+
+def _normalize_host(host: str) -> str:
+    """Add http:// to bare host:port forms; the ollama client accepts either."""
+    if not host.startswith(("http://", "https://")):
+        host = f"http://{host}"
+    return host
+
+
+def _is_loopback(host_url: str) -> bool:
+    """Return True if `host_url` points at a loopback address."""
+    try:
+        parsed = urllib.parse.urlparse(host_url)
+    except ValueError:
+        return False
+    hostname = parsed.hostname
+    if hostname is None:
+        return False
+    if hostname.lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        return False
 
 
 class OllamaClient:
     """Client for interacting with Ollama models."""
 
-    def __init__(self, model: str = "llama3.2"):
+    def __init__(self, model: str = "llama3.2", allow_remote: bool = False):
         self.model = model
-        self.client = ollama.Client()
+        raw_host = os.environ.get("OLLAMA_HOST", DEFAULT_HOST)
+        self.host = _normalize_host(raw_host)
+        if not allow_remote and not _is_loopback(self.host):
+            raise ValueError(
+                f"Refusing to connect to non-loopback Ollama host: {self.host}\n"
+                f"OLLAMA_HOST resolves to a remote endpoint, which means the "
+                f"entire conversation (including any local file content the "
+                f"agent reads) would be sent there. Pass --allow-remote-ollama "
+                f"to permit this explicitly."
+            )
+        self.client = ollama.Client(host=self.host)
 
     def list_models(self) -> list[str]:
         """List available models."""

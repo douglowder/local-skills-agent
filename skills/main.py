@@ -64,6 +64,7 @@ def interactive_mode(
     max_iterations: int = 20,
     require_confirmation: bool = True,
     workspace_root: Optional[Path] = None,
+    allow_remote_ollama: bool = False,
 ) -> None:
     """Run the agent in interactive mode."""
     console = Console()
@@ -76,11 +77,21 @@ def interactive_mode(
             max_iterations=max_iterations,
             require_confirmation=require_confirmation,
             workspace_root=workspace_root,
+            allow_remote_ollama=allow_remote_ollama,
         )
         console.print(f"[green]✓[/green] Using model: [bold]{model}[/bold]")
         console.print(f"[green]✓[/green] Skills directory: [bold]{skills_dir}[/bold]")
         console.print(
             f"[green]✓[/green] Workspace root: [bold]{agent.workspace_root}[/bold]"
+        )
+        host_marker = (
+            "[bold red]REMOTE[/bold red]"
+            if allow_remote_ollama
+            else "[green]loopback[/green]"
+        )
+        console.print(
+            f"[green]✓[/green] Ollama host: [bold]{agent.client.host}[/bold] "
+            f"({host_marker})"
         )
         if require_confirmation:
             console.print(
@@ -194,6 +205,17 @@ def main() -> None:
             "that resolve outside the root are rejected."
         ),
     )
+    parser.add_argument(
+        "--allow-remote-ollama",
+        action="store_true",
+        help=(
+            "Permit the agent to connect to a non-loopback Ollama endpoint "
+            "(via OLLAMA_HOST). DANGEROUS: the entire conversation, including "
+            "any local file content the agent reads, is sent to that host. "
+            "By default the agent refuses to start if OLLAMA_HOST resolves "
+            "to a remote address."
+        ),
+    )
 
     args = parser.parse_args()
     require_confirmation = not args.yes_i_trust_the_llm
@@ -209,6 +231,10 @@ def main() -> None:
                 max_iterations=args.max_iterations,
                 require_confirmation=require_confirmation,
                 workspace_root=workspace_root,
+                allow_remote_ollama=args.allow_remote_ollama,
+            )
+            console.print(
+                f"[green]✓[/green] Ollama host: [bold]{agent.client.host}[/bold]"
             )
             agent.run(args.message)
         except Exception as e:
@@ -222,6 +248,7 @@ def main() -> None:
             args.max_iterations,
             require_confirmation=require_confirmation,
             workspace_root=workspace_root,
+            allow_remote_ollama=args.allow_remote_ollama,
         )
 
 

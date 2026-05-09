@@ -24,8 +24,9 @@ class Agent:
         max_iterations: int = 20,
         require_confirmation: bool = True,
         workspace_root: Optional[Path] = None,
+        allow_remote_ollama: bool = False,
     ):
-        self.client = OllamaClient(model=model)
+        self.client = OllamaClient(model=model, allow_remote=allow_remote_ollama)
         self.skill_loader = SkillLoader(skills_dir=skills_dir)
         self.console = Console()
         self.require_confirmation = require_confirmation
