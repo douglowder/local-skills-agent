@@ -3,7 +3,7 @@
 > **A self-extending AI agent system that runs entirely on local infrastructure with zero API costs**
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-80%20passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-108%20passing-brightgreen.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **Local Skills Agent** is an agentic AI system powered by [Ollama](https://ollama.ai/) that can autonomously create and extend its own capabilities. Built as a local-first reimplementation of Claude Skills, it runs entirely on your hardware with no external API dependencies.
@@ -24,9 +24,11 @@ $ skills --message "Generate a commit message for my staged changes"
 
 ### 🔒 100% Local & Private
 - **Zero API costs** - runs on your hardware forever
-- **Complete data privacy** - nothing leaves your machine
+- **Stays on your machine** - the agent refuses to start if `OLLAMA_HOST` points to a remote endpoint, unless you pass `--allow-remote-ollama`
 - **No vendor lock-in** - open source, works with any Ollama model
 - **Offline capable** - works without internet connection
+
+See [Security](#-security) for how the agent gates `bash`/`write_file`, confines file tools to a workspace root, and validates the Ollama host on startup.
 
 ### 🧩 Composable Skills System
 Skills automatically discover and invoke each other to complete complex workflows:
@@ -100,6 +102,7 @@ Agent: [Uses the newly created skill immediately]
 - [Model Recommendations](#-model-recommendations)
 - [Architecture](#-architecture)
 - [Creating Skills](#-creating-skills)
+- [Security](#-security)
 - [API Reference](#-api-reference)
 - [Development](#-development)
 - [Troubleshooting](#-troubleshooting)
@@ -783,6 +786,86 @@ Save this to `.skills/json_validator.md` and it's immediately available!
 
 ---
 
+## 🔒 Security
+
+The agent runs an LLM in a loop with shell access, file I/O, and a network client. That power needs guardrails — especially because anything the model reads (a file, a skill markdown, a bash command's output) becomes input to its next decision, which makes indirect prompt injection a real concern.
+
+The defaults below are designed to be safe-by-default for a dev machine. Each one has an explicit opt-out flag for sandboxed/CI use.
+
+### 1. Confirmation gate before `bash` and `write_file`
+
+By default, the agent prompts `Allow bash? [y/N]` (or `Allow write_file? [y/N]`) before executing either tool. Declining surfaces `Error: Command execution declined by user` (or `Error: Write declined by user`) back to the model, so it sees the refusal and can adjust.
+
+```bash
+$ skills --message "Clean up build artifacts"
+Tool Call: bash
+Arguments: { "command": "rm -rf build/ dist/" }
+⚠ Allow bash? [y/N]: y
+```
+
+To disable for a fully sandboxed environment:
+
+```bash
+skills --yes-i-trust-the-llm --message "..."
+```
+
+### 2. Workspace-root confinement + secret-path blocklist
+
+`read_file`, `write_file`, and `list_directory` are confined to a workspace root (default: current working directory). Paths that resolve outside the root — including via `..` traversal or symlinks, since paths are resolved before checking — are rejected:
+
+```
+Error: Path is outside the workspace root (/Users/you/project): /etc/passwd
+```
+
+Set a different root:
+
+```bash
+skills --workspace-root /Users/you/sandbox
+```
+
+A hardcoded **secret-path blocklist** also applies, even inside the root, as defense in depth:
+
+| Kind | Patterns |
+|---|---|
+| Directory components | `.ssh`, `.aws`, `.gnupg`, `.gcloud` |
+| File names | `.env`, `.env.*` (e.g. `.env.local`), `id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519`, `credentials`, `credentials.json` |
+| Suffixes | `*.pem`, `*.key` |
+
+A read or write that matches surfaces `Error: Refusing to access secret-looking path: ...` and the operation is skipped.
+
+### 3. Loopback-only Ollama host by default
+
+`OllamaClient` resolves `OLLAMA_HOST` on startup (default: `http://127.0.0.1:11434`), normalizes bare `host:port` forms, and refuses to start unless the host is a loopback address. The resolved host is printed at startup so you can see at a glance where conversation data — including any local file content the agent has read — is going:
+
+```
+✓ Ollama host: http://127.0.0.1:11434 (loopback)
+```
+
+If `OLLAMA_HOST` points elsewhere:
+
+```
+Refusing to connect to non-loopback Ollama host: http://ollama.example.com:11434
+OLLAMA_HOST resolves to a remote endpoint, which means the entire conversation
+(including any local file content the agent reads) would be sent there. Pass
+--allow-remote-ollama to permit this explicitly.
+```
+
+To explicitly allow a remote endpoint (e.g. a self-hosted Ollama on your LAN):
+
+```bash
+OLLAMA_HOST=http://10.0.0.5:11434 skills --allow-remote-ollama
+```
+
+### What the agent still cannot fully prevent
+
+These mitigations narrow the blast radius but do not make the agent safe to point at hostile input. In particular:
+
+- The model can still issue any shell command **you approve**. The confirmation prompt is a human-in-the-loop check, not a sandbox.
+- A skill markdown dropped into `.skills/` becomes part of the system prompt. Treat the `.skills/` directory like code you trust — review new skills before placing them there.
+- The `bash` tool runs with your user's privileges. Confine the workspace, but also consider running the agent inside a container or VM for any untrusted task.
+
+---
+
 ## 📚 API Reference
 
 ### Command Line Interface
@@ -790,6 +873,8 @@ Save this to `.skills/json_validator.md` and it's immediately available!
 ```bash
 usage: skills [-h] [--model MODEL] [--skills-dir SKILLS_DIR]
               [--message MESSAGE] [--max-iterations MAX_ITERATIONS]
+              [--yes-i-trust-the-llm] [--workspace-root WORKSPACE_ROOT]
+              [--allow-remote-ollama]
 
 Local Skills Agent - Ollama-powered agentic loop
 
@@ -806,18 +891,34 @@ options:
 
   --max-iterations MAX_ITERATIONS
                         Maximum number of agent loop iterations (default: 20)
+
+  --yes-i-trust-the-llm
+                        Skip the y/N confirmation before bash and write_file
+                        run. DANGEROUS: see Security section.
+
+  --workspace-root WORKSPACE_ROOT
+                        Confine read_file, write_file, and list_directory to
+                        this directory tree (default: current working directory).
+
+  --allow-remote-ollama
+                        Permit OLLAMA_HOST to resolve to a non-loopback
+                        endpoint. By default the agent refuses to start if so.
 ```
 
 ### Python API
 
 ```python
+from pathlib import Path
 from skills.agent import Agent
 
-# Create agent
+# Create agent (security-relevant defaults shown)
 agent = Agent(
     model="gpt-oss:20b",
     skills_dir=".skills",
-    max_iterations=20
+    max_iterations=20,
+    require_confirmation=True,           # prompt before bash / write_file
+    workspace_root=Path.cwd(),           # confine file tools to this tree
+    allow_remote_ollama=False,           # refuse non-loopback OLLAMA_HOST
 )
 
 # Run a task
