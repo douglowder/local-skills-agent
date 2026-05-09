@@ -11,6 +11,8 @@ from skills.tools import (
     ReadFileTool,
     Tool,
     WriteFileTool,
+    _is_secret_path,
+    _resolve_in_root,
     execute_tool,
     get_default_tools,
 )
@@ -259,6 +261,104 @@ class TestGetDefaultTools:
         assert any(isinstance(tool, WriteFileTool) for tool in tools)
         assert any(isinstance(tool, BashTool) for tool in tools)
         assert any(isinstance(tool, ListDirectoryTool) for tool in tools)
+
+
+class TestPathConfinement:
+    """Tests for workspace-root confinement and secret-path detection."""
+
+    def test_read_outside_root_is_rejected(self, temp_dir, tmp_path_factory):
+        outside = tmp_path_factory.mktemp("outside")
+        target = outside / "leak.txt"
+        target.write_text("secret")
+        tool = ReadFileTool(root=temp_dir)
+        result = tool.execute(path=str(target))
+        assert "outside the workspace root" in result
+
+    def test_read_inside_root_is_allowed(self, temp_dir):
+        target = temp_dir / "ok.txt"
+        target.write_text("hello")
+        tool = ReadFileTool(root=temp_dir)
+        assert tool.execute(path=str(target)) == "hello"
+
+    def test_write_outside_root_is_rejected(self, temp_dir, tmp_path_factory):
+        outside = tmp_path_factory.mktemp("outside")
+        tool = WriteFileTool(root=temp_dir)
+        result = tool.execute(path=str(outside / "x.txt"), content="nope")
+        assert "outside the workspace root" in result
+        assert not (outside / "x.txt").exists()
+
+    def test_list_outside_root_is_rejected(self, temp_dir, tmp_path_factory):
+        outside = tmp_path_factory.mktemp("outside")
+        tool = ListDirectoryTool(root=temp_dir)
+        result = tool.execute(path=str(outside))
+        assert "outside the workspace root" in result
+
+    def test_relative_path_resolves_against_root(self, temp_dir):
+        (temp_dir / "rel.txt").write_text("ok")
+        tool = ReadFileTool(root=temp_dir)
+        assert tool.execute(path="rel.txt") == "ok"
+
+    def test_traversal_via_dotdot_is_rejected(self, temp_dir, tmp_path_factory):
+        outside = tmp_path_factory.mktemp("outside")
+        (outside / "leak.txt").write_text("secret")
+        tool = ReadFileTool(root=temp_dir)
+        # Build a path that escapes via ..
+        escape = temp_dir / ".." / outside.name / "leak.txt"
+        result = tool.execute(path=str(escape))
+        assert "outside the workspace root" in result
+
+
+class TestSecretBlocklist:
+    """Tests for the secret-path blocklist."""
+
+    @pytest.mark.parametrize(
+        "p",
+        [
+            "/Users/x/.ssh/id_rsa",
+            "/home/x/.aws/credentials",
+            "/home/x/.gnupg/pubring.kbx",
+            "/srv/proj/.env",
+            "/srv/proj/.env.local",
+            "/srv/proj/key.pem",
+            "/srv/proj/server.key",
+            "/etc/.gcloud/credentials.json",
+        ],
+    )
+    def test_secret_paths_match(self, p):
+        assert _is_secret_path(Path(p)) is True
+
+    @pytest.mark.parametrize(
+        "p",
+        [
+            "/srv/proj/README.md",
+            "/srv/proj/src/main.py",
+            "/srv/proj/config/app.yaml",
+            "/srv/proj/environment.txt",
+        ],
+    )
+    def test_non_secret_paths_do_not_match(self, p):
+        assert _is_secret_path(Path(p)) is False
+
+    def test_read_secret_inside_root_is_blocked(self, temp_dir):
+        secret = temp_dir / ".env"
+        secret.write_text("API_KEY=sekret")
+        tool = ReadFileTool(root=temp_dir)
+        result = tool.execute(path=str(secret))
+        assert "Refusing to access secret-looking path" in result
+
+    def test_write_secret_inside_root_is_blocked(self, temp_dir):
+        target = temp_dir / "creds.pem"
+        tool = WriteFileTool(root=temp_dir)
+        result = tool.execute(path=str(target), content="-----BEGIN-----")
+        assert "Refusing to access secret-looking path" in result
+        assert not target.exists()
+
+    def test_resolve_in_root_returns_error_for_secret(self, temp_dir):
+        secret = temp_dir / ".env.production"
+        secret.write_text("x")
+        resolved, err = _resolve_in_root(str(secret), temp_dir)
+        assert resolved is None
+        assert err and "secret-looking" in err
 
 
 class TestExecuteTool:

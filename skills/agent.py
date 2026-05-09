@@ -1,7 +1,8 @@
 """Agent loop implementation."""
 
 import json
-from typing import Any
+from pathlib import Path
+from typing import Any, Optional
 
 from rich.console import Console
 from rich.markdown import Markdown
@@ -22,14 +23,21 @@ class Agent:
         skills_dir: str = ".skills",
         max_iterations: int = 20,
         require_confirmation: bool = True,
+        workspace_root: Optional[Path] = None,
     ):
         self.client = OllamaClient(model=model)
         self.skill_loader = SkillLoader(skills_dir=skills_dir)
         self.console = Console()
         self.require_confirmation = require_confirmation
+        self.workspace_root = (
+            Path(workspace_root).resolve() if workspace_root else Path.cwd()
+        )
         confirmer = self._make_confirmer() if require_confirmation else None
         self.tools = {
-            tool.name: tool for tool in get_default_tools(confirm=confirmer)
+            tool.name: tool
+            for tool in get_default_tools(
+                confirm=confirmer, workspace_root=self.workspace_root
+            )
         }
         self.max_iterations = max_iterations
 

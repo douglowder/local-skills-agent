@@ -2,6 +2,7 @@
 
 import sys
 from pathlib import Path
+from typing import Optional
 
 from rich.console import Console
 from rich.prompt import Prompt
@@ -62,6 +63,7 @@ def interactive_mode(
     skills_dir: str,
     max_iterations: int = 20,
     require_confirmation: bool = True,
+    workspace_root: Optional[Path] = None,
 ) -> None:
     """Run the agent in interactive mode."""
     console = Console()
@@ -73,9 +75,13 @@ def interactive_mode(
             skills_dir=skills_dir,
             max_iterations=max_iterations,
             require_confirmation=require_confirmation,
+            workspace_root=workspace_root,
         )
         console.print(f"[green]✓[/green] Using model: [bold]{model}[/bold]")
         console.print(f"[green]✓[/green] Skills directory: [bold]{skills_dir}[/bold]")
+        console.print(
+            f"[green]✓[/green] Workspace root: [bold]{agent.workspace_root}[/bold]"
+        )
         if require_confirmation:
             console.print(
                 "[green]✓[/green] Confirmation prompts: [bold]on[/bold] "
@@ -179,9 +185,19 @@ def main() -> None:
             "files without asking. Only use in fully sandboxed environments."
         ),
     )
+    parser.add_argument(
+        "--workspace-root",
+        default=None,
+        help=(
+            "Confine read_file, write_file, and list_directory to this "
+            "directory tree (default: current working directory). Paths "
+            "that resolve outside the root are rejected."
+        ),
+    )
 
     args = parser.parse_args()
     require_confirmation = not args.yes_i_trust_the_llm
+    workspace_root = Path(args.workspace_root) if args.workspace_root else None
 
     if args.message:
         # Non-interactive mode
@@ -192,6 +208,7 @@ def main() -> None:
                 skills_dir=args.skills_dir,
                 max_iterations=args.max_iterations,
                 require_confirmation=require_confirmation,
+                workspace_root=workspace_root,
             )
             agent.run(args.message)
         except Exception as e:
@@ -204,6 +221,7 @@ def main() -> None:
             args.skills_dir,
             args.max_iterations,
             require_confirmation=require_confirmation,
+            workspace_root=workspace_root,
         )
 
 
