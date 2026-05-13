@@ -72,7 +72,7 @@ def list_skills(agent: Agent, console: Console) -> None:
         console.print(f"\n{header}")
         for skill in plugin.skills:
             console.print(
-                f"  • [cyan]{skill.name}[/cyan]: {skill.description}"
+                f"  • [cyan]{skill.slug}[/cyan]: {skill.description}"
             )
 
     if standalone:
