@@ -4,7 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from skills.skill_loader import Skill, SkillLoader
+from skills.skill_loader import (
+    Skill,
+    SkillLoader,
+    _first_prose_line,
+    _parse_frontmatter,
+)
 
 
 class TestSkill:
@@ -248,3 +253,211 @@ Some **markdown** formatting.
 
         skill = loader.get_skill("content_test")
         assert skill.content == original_content
+
+
+class TestFrontmatterParser:
+    """Tests for the YAML frontmatter parser."""
+
+    def test_no_frontmatter_returns_original_text(self):
+        text = "# Heading\n\nbody text\n"
+        fm, body = _parse_frontmatter(text)
+        assert fm is None
+        assert body == text
+
+    def test_simple_frontmatter(self):
+        text = "---\nname: foo\ndescription: A foo skill\n---\n\nbody\n"
+        fm, body = _parse_frontmatter(text)
+        assert fm == {"name": "foo", "description": "A foo skill"}
+        assert body == "body\n"
+
+    def test_quoted_value_with_colon(self):
+        text = (
+            "---\n"
+            'description: "Check the health: crash rates, install counts"\n'
+            "---\n"
+            "body\n"
+        )
+        fm, body = _parse_frontmatter(text)
+        assert fm["description"] == "Check the health: crash rates, install counts"
+
+    def test_quoted_value_with_backticks(self):
+        text = (
+            "---\n"
+            'description: "`@expo/ui/jetpack-compose` package"\n'
+            "---\n"
+            "body\n"
+        )
+        fm, _ = _parse_frontmatter(text)
+        assert fm["description"] == "`@expo/ui/jetpack-compose` package"
+
+    def test_extra_keys_preserved(self):
+        text = (
+            "---\n"
+            "name: foo\n"
+            "description: a thing\n"
+            "version: 1.2.3\n"
+            "license: MIT\n"
+            'allowed-tools: "Read,Bash(eas *)"\n'
+            "---\n"
+        )
+        fm, _ = _parse_frontmatter(text)
+        assert fm["version"] == "1.2.3"
+        assert fm["license"] == "MIT"
+        assert fm["allowed-tools"] == "Read,Bash(eas *)"
+
+    def test_unterminated_frontmatter_falls_back(self):
+        text = "---\nname: foo\nno closing fence ever comes\n"
+        fm, body = _parse_frontmatter(text)
+        assert fm is None
+        assert body == text
+
+    def test_first_prose_line_skips_headings(self):
+        text = "# Heading\n\n## Subheading\n\nFirst real line.\nSecond line.\n"
+        assert _first_prose_line(text) == "First real line."
+
+
+class TestExpoSkillFormat:
+    """Tests for loading Anthropic/Expo-style skills with frontmatter."""
+
+    def _write_expo_skill(
+        self, skills_dir: Path, slug: str, frontmatter: str, body: str = ""
+    ) -> Path:
+        skill_dir = skills_dir / slug
+        skill_dir.mkdir()
+        path = skill_dir / "SKILL.md"
+        path.write_text(f"---\n{frontmatter}---\n\n{body}")
+        return path
+
+    def test_loads_skill_with_frontmatter(self, temp_dir):
+        skills_dir = temp_dir / ".skills"
+        skills_dir.mkdir()
+        self._write_expo_skill(
+            skills_dir,
+            "expo-module",
+            "name: expo-module\n"
+            "description: Guide for writing Expo native modules.\n"
+            "version: 1.0.0\n"
+            "license: MIT\n",
+            "# Writing Expo Modules\n\nContent here.\n",
+        )
+
+        loader = SkillLoader(skills_dir=skills_dir)
+        loader.discover_skills()
+
+        skill = loader.get_skill("expo-module")
+        assert skill is not None
+        assert skill.name == "expo-module"
+        assert skill.description == "Guide for writing Expo native modules."
+        assert skill.metadata == {"version": "1.0.0", "license": "MIT"}
+        # Content is preserved including frontmatter
+        assert skill.content.startswith("---\n")
+
+    def test_name_falls_back_to_directory_when_missing(self, temp_dir):
+        skills_dir = temp_dir / ".skills"
+        skills_dir.mkdir()
+        # No `name:` key — should use parent directory
+        self._write_expo_skill(
+            skills_dir,
+            "fallback-named",
+            "description: Some skill\n",
+        )
+
+        loader = SkillLoader(skills_dir=skills_dir)
+        loader.discover_skills()
+        assert loader.get_skill("fallback-named") is not None
+
+    def test_description_falls_back_to_body_when_missing(self, temp_dir):
+        skills_dir = temp_dir / ".skills"
+        skills_dir.mkdir()
+        self._write_expo_skill(
+            skills_dir,
+            "no-desc",
+            "name: no-desc\n",
+            "# Title\n\nFirst body line.\n",
+        )
+        loader = SkillLoader(skills_dir=skills_dir)
+        loader.discover_skills()
+        assert loader.get_skill("no-desc").description == "First body line."
+
+    def test_flat_and_nested_skills_coexist(self, temp_dir):
+        skills_dir = temp_dir / ".skills"
+        skills_dir.mkdir()
+
+        # Flat
+        (skills_dir / "legacy.md").write_text(
+            "# Legacy\n\nA legacy-format skill.\n"
+        )
+        # Nested (expo format)
+        self._write_expo_skill(
+            skills_dir,
+            "modern",
+            "name: modern\ndescription: Modern format skill\n",
+        )
+
+        loader = SkillLoader(skills_dir=skills_dir)
+        loader.discover_skills()
+        names = set(loader.get_skill_names())
+        assert names == {"legacy", "modern"}
+        assert loader.get_skill("legacy").metadata == {}
+        assert loader.get_skill("modern").description == "Modern format skill"
+
+    def test_does_not_recurse_into_supporting_subdirs(self, temp_dir):
+        """Markdown files inside supporting subdirs (templates/, etc.) must
+        not be picked up as skills — only `<slug>/SKILL.md`."""
+        skills_dir = temp_dir / ".skills"
+        skills_dir.mkdir()
+        # Real skill
+        self._write_expo_skill(
+            skills_dir,
+            "real-skill",
+            "name: real-skill\ndescription: real\n",
+        )
+        # A template that happens to be .md inside a deeper subdir — must
+        # NOT be discovered as a skill
+        templates = skills_dir / "real-skill" / "templates"
+        templates.mkdir()
+        (templates / "report.md").write_text("# Just a template\n")
+
+        loader = SkillLoader(skills_dir=skills_dir)
+        loader.discover_skills()
+        assert loader.get_skill_names() == ["real-skill"]
+
+    def test_summary_includes_paths_for_both_formats(self, temp_dir):
+        skills_dir = temp_dir / ".skills"
+        skills_dir.mkdir()
+        (skills_dir / "legacy.md").write_text("# Legacy\n\nDoes things.\n")
+        self._write_expo_skill(
+            skills_dir,
+            "modern",
+            "name: modern\ndescription: Modern.\n",
+        )
+
+        loader = SkillLoader(skills_dir=skills_dir)
+        loader.discover_skills()
+        summary = loader.get_skills_summary()
+        assert "legacy.md" in summary
+        assert "modern/SKILL.md" in summary
+
+    def test_real_world_expo_module_frontmatter(self, temp_dir):
+        """Smoke-check against a real-world skill from the expo-skills repo."""
+        skills_dir = temp_dir / ".skills"
+        skills_dir.mkdir()
+        self._write_expo_skill(
+            skills_dir,
+            "expo-module",
+            "name: expo-module\n"
+            "description: Guide for writing Expo native modules and views "
+            "using the Expo Modules API (Swift, Kotlin, TypeScript). Covers "
+            "module definition DSL, native views, shared objects, config "
+            "plugins, lifecycle hooks, autolinking, and type system. Use "
+            "when building or modifying native modules for Expo.\n"
+            "version: 1.0.0\n"
+            "license: MIT\n",
+        )
+        loader = SkillLoader(skills_dir=skills_dir)
+        loader.discover_skills()
+        s = loader.get_skill("expo-module")
+        assert s.name == "expo-module"
+        assert s.description.startswith("Guide for writing Expo native modules")
+        assert s.metadata["version"] == "1.0.0"
+        assert s.metadata["license"] == "MIT"
