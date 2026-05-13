@@ -1,10 +1,12 @@
 """Tests for the skill_loader module."""
 
 from pathlib import Path
+from typing import Optional
 
 import pytest
 
 from skills.skill_loader import (
+    Plugin,
     Skill,
     SkillLoader,
     _first_prose_line,
@@ -461,3 +463,181 @@ class TestExpoSkillFormat:
         assert s.description.startswith("Guide for writing Expo native modules")
         assert s.metadata["version"] == "1.0.0"
         assert s.metadata["license"] == "MIT"
+
+
+def _write_plugin(
+    skills_dir: Path,
+    plugin_name: str,
+    plugin_json: Optional[dict] = None,
+    skill_slugs: Optional[list[str]] = None,
+) -> Path:
+    """Build `<skills_dir>/plugins/<plugin_name>/...` matching the Claude
+    Code marketplace layout. Returns the plugin directory path."""
+    import json as _json
+
+    plugin_dir = skills_dir / "plugins" / plugin_name
+    plugin_dir.mkdir(parents=True)
+    if plugin_json is not None:
+        (plugin_dir / ".claude-plugin").mkdir()
+        (plugin_dir / ".claude-plugin" / "plugin.json").write_text(
+            _json.dumps(plugin_json)
+        )
+    skills_subdir = plugin_dir / "skills"
+    skills_subdir.mkdir()
+    for slug in skill_slugs or []:
+        s_dir = skills_subdir / slug
+        s_dir.mkdir()
+        (s_dir / "SKILL.md").write_text(
+            f"---\nname: {slug}\ndescription: {slug} skill\nversion: 1.0.0\n---\n\n"
+            f"# {slug}\n\nBody.\n"
+        )
+    return plugin_dir
+
+
+class TestPluginLayout:
+    """Tests for the .skills/plugins/<plugin>/skills/<slug>/SKILL.md layout."""
+
+    def test_discovers_plugin_and_its_skills(self, temp_dir):
+        skills_dir = temp_dir / ".skills"
+        skills_dir.mkdir()
+        _write_plugin(
+            skills_dir,
+            "expo",
+            plugin_json={
+                "name": "expo",
+                "version": "1.0.0",
+                "description": "Official Expo skills",
+                "author": {"name": "Expo Team", "email": "support@expo.dev"},
+            },
+            skill_slugs=["expo-module", "building-native-ui"],
+        )
+
+        loader = SkillLoader(skills_dir=skills_dir)
+        loader.discover_skills()
+
+        assert "expo" in loader.plugins
+        plugin = loader.plugins["expo"]
+        assert plugin.name == "expo"
+        assert plugin.version == "1.0.0"
+        assert plugin.description == "Official Expo skills"
+        assert plugin.author == {"name": "Expo Team", "email": "support@expo.dev"}
+        assert len(plugin.skills) == 2
+
+    def test_skill_names_are_namespaced(self, temp_dir):
+        skills_dir = temp_dir / ".skills"
+        skills_dir.mkdir()
+        _write_plugin(skills_dir, "expo", plugin_json={"name": "expo"}, skill_slugs=["foo"])
+
+        loader = SkillLoader(skills_dir=skills_dir)
+        loader.discover_skills()
+        s = loader.get_skill("expo:foo")
+        assert s is not None
+        assert s.plugin == "expo"
+        assert s.slug == "foo"
+        # Bare slug doesn't collide with the namespaced key
+        assert loader.get_skill("foo") is None
+
+    def test_summary_groups_by_plugin(self, temp_dir):
+        skills_dir = temp_dir / ".skills"
+        skills_dir.mkdir()
+        _write_plugin(
+            skills_dir,
+            "expo",
+            plugin_json={
+                "name": "expo",
+                "version": "1.2.3",
+                "description": "Official Expo skills",
+            },
+            skill_slugs=["alpha", "beta"],
+        )
+        # Add a standalone too
+        (skills_dir / "legacy.md").write_text("# Legacy\n\nA legacy skill.\n")
+
+        loader = SkillLoader(skills_dir=skills_dir)
+        loader.discover_skills()
+        summary = loader.get_skills_summary()
+
+        assert "[Plugin: expo v1.2.3] Official Expo skills" in summary
+        assert "expo:alpha" in summary
+        assert "expo:beta" in summary
+        assert "[Standalone skills]" in summary
+        assert "legacy" in summary
+
+    def test_missing_plugin_json_is_ok(self, temp_dir):
+        """A plugin directory without plugin.json still yields skills,
+        just with empty plugin metadata."""
+        skills_dir = temp_dir / ".skills"
+        skills_dir.mkdir()
+        _write_plugin(
+            skills_dir,
+            "anon",
+            plugin_json=None,  # no .claude-plugin/plugin.json
+            skill_slugs=["one"],
+        )
+
+        loader = SkillLoader(skills_dir=skills_dir)
+        loader.discover_skills()
+        assert "anon" in loader.plugins
+        assert loader.plugins["anon"].version == ""
+        assert loader.plugins["anon"].description == ""
+        assert loader.get_skill("anon:one") is not None
+
+    def test_malformed_plugin_json_does_not_crash(self, temp_dir, capsys):
+        skills_dir = temp_dir / ".skills"
+        skills_dir.mkdir()
+        plugin_dir = _write_plugin(
+            skills_dir, "broken", plugin_json={}, skill_slugs=["x"]
+        )
+        # Replace plugin.json with garbage
+        (plugin_dir / ".claude-plugin" / "plugin.json").write_text("{not json")
+
+        loader = SkillLoader(skills_dir=skills_dir)
+        loader.discover_skills()
+        captured = capsys.readouterr()
+        assert "Warning" in captured.out
+        # Skill is still loaded; plugin exists with empty metadata
+        assert loader.get_skill("broken:x") is not None
+        assert loader.plugins["broken"].description == ""
+
+    def test_all_three_layouts_coexist(self, temp_dir):
+        skills_dir = temp_dir / ".skills"
+        skills_dir.mkdir()
+        # Flat
+        (skills_dir / "flat.md").write_text("# Flat\n\nA flat skill.\n")
+        # Nested standalone
+        nested = skills_dir / "nested"
+        nested.mkdir()
+        (nested / "SKILL.md").write_text(
+            "---\nname: nested\ndescription: Nested standalone\n---\n\n"
+            "# Nested\n"
+        )
+        # Plugin-scoped
+        _write_plugin(
+            skills_dir, "myplug", plugin_json={"name": "myplug"}, skill_slugs=["task"]
+        )
+
+        loader = SkillLoader(skills_dir=skills_dir)
+        loader.discover_skills()
+        names = set(loader.get_skill_names())
+        assert names == {"flat", "nested", "myplug:task"}
+
+    def test_plugins_dir_is_not_treated_as_a_nested_skill(self, temp_dir):
+        """`<dir>/plugins/SKILL.md` should not be loaded as a standalone
+        skill — the `plugins/` directory is reserved."""
+        skills_dir = temp_dir / ".skills"
+        skills_dir.mkdir()
+        plugins_dir = skills_dir / "plugins"
+        plugins_dir.mkdir()
+        # A stray SKILL.md directly under plugins/ — must be ignored
+        (plugins_dir / "SKILL.md").write_text(
+            "---\nname: bogus\ndescription: nope\n---\n"
+        )
+        # And a legitimate plugin alongside it
+        _write_plugin(
+            skills_dir, "real", plugin_json={"name": "real"}, skill_slugs=["s"]
+        )
+
+        loader = SkillLoader(skills_dir=skills_dir)
+        loader.discover_skills()
+        assert "bogus" not in loader.skills
+        assert loader.get_skill("real:s") is not None
