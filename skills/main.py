@@ -48,14 +48,40 @@ def list_models(agent: Agent, console: Console) -> None:
 
 
 def list_skills(agent: Agent, console: Console) -> None:
-    """List available skills."""
-    skills = agent.skill_loader.skills
-    if skills:
-        console.print("\n[bold]Available skills:[/bold]")
-        for skill in skills.values():
-            console.print(f"  • [cyan]{skill.name}[/cyan]: {skill.description}")
-    else:
-        console.print("[yellow]No skills found. Create .md files in the .skills/ directory.[/yellow]")
+    """List available skills, grouped hierarchically by plugin."""
+    loader = agent.skill_loader
+    if not loader.skills:
+        console.print(
+            "[yellow]No skills found. Create SKILL.md files under "
+            ".skills/plugins/<plugin>/skills/<slug>/ "
+            "(or as flat .md files in .skills/).[/yellow]"
+        )
+        return
+
+    console.print("\n[bold]Available skills:[/bold]")
+
+    plugins_with_skills = [p for p in loader.plugins.values() if p.skills]
+    standalone = [s for s in loader.skills.values() if s.plugin is None]
+
+    for plugin in plugins_with_skills:
+        header = f"[bold magenta]{plugin.name}[/bold magenta]"
+        if plugin.version:
+            header += f" [dim]v{plugin.version}[/dim]"
+        if plugin.description:
+            header += f"  {plugin.description}"
+        console.print(f"\n{header}")
+        for skill in plugin.skills:
+            console.print(
+                f"  • [cyan]{skill.name}[/cyan]: {skill.description}"
+            )
+
+    if standalone:
+        if plugins_with_skills:
+            console.print("\n[bold magenta](standalone)[/bold magenta]")
+        for skill in standalone:
+            console.print(
+                f"  • [cyan]{skill.name}[/cyan]: {skill.description}"
+            )
 
 
 def interactive_mode(
