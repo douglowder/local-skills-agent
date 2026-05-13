@@ -1,3 +1,9 @@
+---
+name: technical_documentation_generator
+description: Generate comprehensive technical documentation (API reference, architecture overview, usage examples, troubleshooting) for a Python project by reading source files and extracting docstrings.
+version: 1.0.0
+---
+
 # Technical Documentation Generator
 
 **Automatically generates comprehensive, professional technical documentation for Python projects.**

@@ -1,3 +1,9 @@
+---
+name: code_quality_analyzer
+description: Comprehensive Python code quality analysis with cyclomatic complexity, maintainability index, docstring coverage, and industry-benchmarked recommendations. Produces a structured report.
+version: 1.0.0
+---
+
 # Code Quality Analyzer
 
 **A comprehensive code analysis skill that evaluates code quality metrics, identifies issues, and provides industry-benchmarked recommendations.**
@@ -20,7 +26,7 @@ When a user asks to analyze code quality, follow these steps:
 **IMPORTANT:** Before analyzing any code, you MUST first read the industry standard benchmarks:
 
 ```
-read_file(".skills/code_quality_analyzer/benchmarks/industry_standards.json")
+read_file(".skills/plugins/python/skills/code_quality_analyzer/benchmarks/industry_standards.json")
 ```
 
 This file contains the thresholds for:

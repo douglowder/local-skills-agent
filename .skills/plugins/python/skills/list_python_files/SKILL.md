@@ -1,3 +1,9 @@
+---
+name: list_python_files
+description: Find and list all Python files in a directory tree, optionally excluding __pycache__ and dotfiles. Use when the user asks "what Python files are in this project" or wants an inventory.
+version: 1.0.0
+---
+
 # List Python Files Skill
 
 Find and list all Python files in a directory tree.

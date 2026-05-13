@@ -1,3 +1,9 @@
+---
+name: test_generator
+description: Generate skeleton pytest unit tests for a Python module by analyzing its public functions and classes. Produces test_<module>.py with placeholder test functions and TestClass scaffolds.
+version: 1.0.0
+---
+
 # test_generator Skill
 
 ## Purpose

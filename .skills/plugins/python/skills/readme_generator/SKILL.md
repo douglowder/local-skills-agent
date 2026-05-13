@@ -1,3 +1,9 @@
+---
+name: readme_generator
+description: Generate a professional README.md for a Python project by analyzing pyproject.toml, source files, and tests, then producing standard sections (installation, usage, structure, license).
+version: 1.0.0
+---
+
 # README Generator
 
 **Generate a professional README.md for a Python project by analyzing the codebase**

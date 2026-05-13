@@ -1,3 +1,9 @@
+---
+name: write_hello_world
+description: Write a simple Python "Hello, World!" program to hello_world.py in the current directory. Use when the user asks for a hello-world example or wants to verify the write_file tool works.
+version: 1.0.0
+---
+
 # Write Hello World Skill
 
 Write a simple "Hello, World!" program in Python.

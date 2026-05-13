@@ -1,0 +1,8 @@
+{
+  "name": "python",
+  "version": "1.0.0",
+  "description": "Python development skills: code quality analysis, documentation generation, test scaffolding, and skill authoring.",
+  "author": {
+    "name": "Local Skills Agent"
+  }
+}

@@ -1,10 +1,16 @@
+---
+name: skill_creator
+description: Create new skill definitions (with YAML frontmatter) for the local skills agent and place them under the correct plugin directory. Use when the user requests a capability that doesn't yet exist as a skill.
+version: 1.0.0
+---
+
 # Skill Creator
 
 **Create new skills for the skills system - the meta-skill that extends the agent's capabilities**
 
 ## Purpose
 
-This skill enables you to create new skill definitions for the local skills agent. When a user requests functionality that doesn't exist yet, use this skill to generate a properly formatted skill file.
+This skill enables you to create new skill definitions for the local skills agent. When a user requests functionality that doesn't exist yet, use this skill to generate a properly formatted SKILL.md file under the appropriate plugin.
 
 ## Instructions
 
@@ -17,27 +23,45 @@ Ask clarifying questions if needed:
 - What inputs does it need?
 - What output should it produce?
 - Are there any specific tools it should use?
+- Which plugin does it belong to? (Default to `python` for this project.)
 - Should it be simple or multi-file (with supporting resources)?
 
-### 2. Choose Skill Type
+### 2. Choose Plugin and Slug
 
-**Simple Skill** - Single markdown file
+Skills live under `.skills/plugins/<plugin>/skills/<slug>/SKILL.md`. The plugin
+groups related skills (e.g. `python` for Python-development skills); the slug
+is the bare skill identifier and should be lowercase with underscores
+(`my_new_skill`).
+
+If the user hasn't said otherwise, place new skills in the `python` plugin
+that ships with this project.
+
+### 3. Choose Skill Type
+
+**Simple Skill** — Single `SKILL.md` file
 - Quick tasks (file operations, simple analysis)
 - Uses only the core tools (read_file, write_file, bash, list_directory)
-- Example: write_hello_world.md
+- Example: `write_hello_world`
 
-**Multi-File Skill** - Skill with supporting resources
+**Multi-File Skill** — `SKILL.md` plus sibling subdirectories
 - Complex analysis or generation tasks
-- Requires scripts, benchmarks, templates, or data files
-- Creates a directory structure: `.skills/skill_name/`
-- Example: code_quality_analyzer (has benchmarks/, scripts/, templates/)
+- Needs scripts, benchmarks, templates, or data files
+- All resources live next to `SKILL.md` under
+  `.skills/plugins/<plugin>/skills/<slug>/`
+- Example: `code_quality_analyzer` (has `benchmarks/`, `scripts/`, `templates/`)
 
-### 3. Create the Skill File
+### 4. Create the Skill File
 
-**File location:** `.skills/[skill_name].md`
+**File location:** `.skills/plugins/<plugin>/skills/<slug>/SKILL.md`
 
 **Format:**
 ```markdown
+---
+name: <slug>
+description: <one-line summary the agent uses to match user requests to this skill>
+version: 1.0.0
+---
+
 # Skill Name
 
 **Brief one-line description**
@@ -66,28 +90,39 @@ More instructions...
 Provide examples of how the skill would be invoked.
 ```
 
-### 4. For Multi-File Skills
+**Frontmatter rules:**
+- `name` should match the directory slug.
+- `description` is the single most important field — the agent reads it on
+  startup and uses it to decide when to invoke the skill. Make it specific:
+  start with what the skill does, then mention when to use it. Avoid generic
+  phrases like "this skill helps with X".
+- `version` is informational; bump it when the skill changes meaningfully.
 
-Create supporting directory structure:
+### 5. For Multi-File Skills
+
+Create the supporting directory structure alongside `SKILL.md`:
 
 ```
-.skills/
-├── skill_name.md           # Main skill file
-└── skill_name/             # Supporting resources
-    ├── scripts/            # Python scripts or other executables
-    ├── benchmarks/         # Reference data, standards
-    ├── templates/          # Output templates
-    └── data/              # Other data files
+.skills/plugins/<plugin>/skills/<slug>/
+├── SKILL.md              # Main skill file (frontmatter + instructions)
+├── scripts/              # Python scripts or other executables
+├── benchmarks/           # Reference data, standards
+├── templates/            # Output templates
+└── data/                 # Other data files
 ```
 
-**Important:** The main skill file MUST instruct the LLM to read supporting files as the FIRST step.
+**Important:** The main skill file MUST instruct the LLM to read supporting
+files as the FIRST step, using the full path under
+`.skills/plugins/<plugin>/skills/<slug>/`.
 
-### 5. Skill Writing Best Practices
+### 6. Skill Writing Best Practices
 
 **Clear Instructions:**
 - Use numbered steps
 - Be explicit about which tools to call
-- Specify exact file paths
+- Specify exact file paths (always including the
+  `.skills/plugins/<plugin>/skills/<slug>/` prefix when referring to your
+  own supporting files)
 - Include error handling guidance
 
 **Progressive Disclosure:**
@@ -96,12 +131,13 @@ Create supporting directory structure:
 - Use list_directory to discover available resources
 
 **Automatic Invocation:**
-- Write clear "Purpose" section so the agent knows when to use this skill
+- Make the frontmatter `description` precise — that's what the agent matches against
 - Include trigger phrases users might say
-- Make the skill name descriptive
+- Make the skill slug descriptive
 
 **Composability:**
-- Skills can invoke other skills using read_file
+- Skills can invoke other skills using read_file, e.g.
+  `read_file(".skills/plugins/python/skills/code_quality_analyzer/SKILL.md")`
 - Mention related skills in the Purpose section
 - Delegate complex subtasks to specialized skills
 
@@ -110,6 +146,12 @@ Create supporting directory structure:
 ### Template: Simple Task Skill
 
 ```markdown
+---
+name: <slug>
+description: <one-line summary>
+version: 1.0.0
+---
+
 # [Skill Name]
 
 **[One-line description]**
@@ -142,6 +184,12 @@ Action: [what the skill does]
 ### Template: Analysis Skill
 
 ```markdown
+---
+name: <slug>
+description: <one-line summary>
+version: 1.0.0
+---
+
 # [Skill Name]
 
 **Analyze [what] and provide [output]**
@@ -182,6 +230,12 @@ Create a structured report with:
 ### Template: Generator Skill
 
 ```markdown
+---
+name: <slug>
+description: <one-line summary>
+version: 1.0.0
+---
+
 # [Skill Name]
 
 **Generate [artifact] based on [input]**
@@ -211,6 +265,12 @@ Tell the user what was created and where to find it.
 ### Template: Multi-File Complex Skill
 
 ```markdown
+---
+name: <slug>
+description: <one-line summary>
+version: 1.0.0
+---
+
 # [Skill Name]
 
 **[Comprehensive description]**
@@ -226,7 +286,7 @@ This skill provides [detailed capabilities].
 **IMPORTANT:** Before proceeding, read the required data files:
 
 ```
-read_file(".skills/[skill_name]/[resource_type]/[file].json")
+read_file(".skills/plugins/<plugin>/skills/<slug>/<resource_type>/<file>.json")
 ```
 
 ### 2. Identify Targets
@@ -241,13 +301,13 @@ read_file(".skills/[skill_name]/[resource_type]/[file].json")
 ## Supporting Resources
 
 ### Scripts
-- `.skills/[skill_name]/scripts/analyzer.py` - [Description]
+- `.skills/plugins/<plugin>/skills/<slug>/scripts/analyzer.py` - [Description]
 
 ### Benchmarks
-- `.skills/[skill_name]/benchmarks/standards.json` - [Description]
+- `.skills/plugins/<plugin>/skills/<slug>/benchmarks/standards.json` - [Description]
 
 ### Templates
-- `.skills/[skill_name]/templates/report.md` - [Description]
+- `.skills/plugins/<plugin>/skills/<slug>/templates/report.md` - [Description]
 ```
 
 ## Example: Creating a Simple Skill
@@ -255,9 +315,15 @@ read_file(".skills/[skill_name]/[resource_type]/[file].json")
 **User request:** "Create a skill that counts lines in Python files"
 
 **Steps:**
-1. Use write_file to create `.skills/count_python_lines.md`:
+1. Use write_file to create `.skills/plugins/python/skills/count_python_lines/SKILL.md`:
 
 ```markdown
+---
+name: count_python_lines
+description: Count total lines of code across Python files in a directory tree. Use when the user wants to measure codebase size.
+version: 1.0.0
+---
+
 # Count Python Lines
 
 **Count total lines of code in Python files**
@@ -293,19 +359,20 @@ Sum up all lines and report to the user with:
 ```
 
 2. Confirm the skill was created
-3. The skill is now automatically available to the agent!
+3. The skill is now automatically available to the agent on next startup
 
 ## Testing New Skills
 
 After creating a skill, suggest the user test it:
 ```
-"I've created the [skill_name] skill. You can now use it by saying: '[example trigger phrase]'"
+"I've created the [skill_name] skill under the [plugin] plugin. Restart the agent and you can use it by saying: '[example trigger phrase]'"
 ```
 
 ## Notes
 
-- Skill names should be lowercase with underscores: `my_skill_name.md`
+- Skill slugs should be lowercase with underscores: `my_skill_name`
+- The directory name and the frontmatter `name` should match
 - All skills are auto-discovered on agent startup
-- Skills can be updated by editing the .md files
+- Skills can be updated by editing the SKILL.md file
 - Use clear, imperative language in instructions
 - Think about error cases and edge conditions

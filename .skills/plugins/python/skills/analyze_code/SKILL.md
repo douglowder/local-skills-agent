@@ -1,3 +1,9 @@
+---
+name: analyze_code
+description: Quick Python code analysis. Delegates to the code_quality_analyzer skill for detailed industry-benchmarked metrics; otherwise provides a basic overview of structure, functions, and classes.
+version: 1.0.0
+---
+
 # Analyze Code Skill
 
 **Quick code analysis - delegates to code_quality_analyzer for detailed metrics**
@@ -20,7 +26,7 @@ When analyzing code:
 **Automatically invoke code_quality_analyzer skill:**
 
 ```
-read_file(".skills/code_quality_analyzer.md")
+read_file(".skills/plugins/python/skills/code_quality_analyzer/SKILL.md")
 ```
 
 Then follow instructions in that skill. It includes:
